@@ -238,3 +238,18 @@ Hard-won. Do not relearn them the expensive way.
   the caption ("An imagining of ...").
 - **Before narration exists, the toolbar shows "Loading..." forever.** Not a
   bug; generate the audio.
+- **Fact-check sensitive personal and family history with living relatives
+  before publishing, and weigh the privacy and safety implications.** A
+  microautobiography is public and permanent. Details about family, other
+  people, or events in other countries can be wrong in ways only a relative
+  will catch, and can create real risk for people the subject did not think
+  to consider (travel, employment, family still living elsewhere). Run the
+  sensitive chapters past the people in them, correct the facts, and let the
+  subject decide what stays public. This is the subject's call, not yours.
+- **Redact text in a screenshot with a prompt, not a blur overlay.** Blur
+  rectangles are imprecise and bleed into neighboring words. Ask an image
+  model to replace only the target words with a clean solid redaction bar,
+  then verify no numbers got garbled.
+- **Carousels use a fixed-height frame** so mixed-aspect slides do not resize
+  the page as they rotate. Do not switch it back to `min-height` plus
+  `object-contain`; that reintroduces the jitter.

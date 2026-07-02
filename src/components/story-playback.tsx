@@ -539,7 +539,8 @@ export function StoryPlayback({ sections = STORY_SECTIONS }: StoryPlaybackProps)
                   )}
                   {section.images && section.images.length > 1 ? (
                     <div className="mt-6 mb-8 flex flex-col items-center">
-                      <div className="relative w-full max-w-[800px] overflow-hidden rounded-lg" style={{ minHeight: '300px' }}>
+                      {/* Fixed-height frame so mixed-aspect slides don't jitter the page on rotation */}
+                      <div className="relative w-full max-w-[800px] h-[320px] sm:h-[400px] overflow-hidden rounded-lg">
                         <AnimatePresence mode="wait">
                           <motion.div
                             key={carouselIndices[section.id] || 0}
@@ -547,20 +548,21 @@ export function StoryPlayback({ sections = STORY_SECTIONS }: StoryPlaybackProps)
                             animate={{ opacity: 1 }}
                             exit={{ opacity: 0 }}
                             transition={{ duration: 0.6 }}
+                            className="absolute inset-0"
                           >
                             <Image
                               src={section.images[carouselIndices[section.id] || 0].url}
                               alt={section.images[carouselIndices[section.id] || 0].caption || section.title}
                               width={800}
                               height={600}
-                              className="rounded-lg max-h-[400px] min-w-[300px] sm:min-w-[500px] w-full object-contain select-none pointer-events-none"
+                              className="h-full w-full rounded-lg object-contain select-none pointer-events-none"
                               style={{ borderRadius: '0.5rem' }}
                             />
                           </motion.div>
                         </AnimatePresence>
                       </div>
                       <div className="mt-2 flex flex-col items-center gap-1">
-                        <p className="text-xs text-zinc-400 italic text-center select-none">
+                        <p className="min-h-[2.5rem] text-xs text-zinc-400 italic text-center select-none">
                           {section.images[carouselIndices[section.id] || 0].caption}
                         </p>
                         <div className="flex gap-1.5 mt-1">
