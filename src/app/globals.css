@@ -1,0 +1,104 @@
+@import 'tailwindcss';
+@import 'tw-animate-css';
+
+/* ------------------------------------------------------------------ */
+/* Letterhead design tokens - swap for your brand.                    */
+/*                                                                    */
+/* The four tokens below drive the page shell (background, body text, */
+/* accent color, hairline rules). Defaults are the reference build's  */
+/* ink / bone / old-gold letterhead. Note: the player components also */
+/* use the accent gold as literal hex in a few Tailwind classes -     */
+/* search the repo for #C2A15C (and rgba(194,161,92,...)) to swap the */
+/* palette completely.                                                */
+/* ------------------------------------------------------------------ */
+:root {
+  --ground: #0a0b10; /* page background (ink) */
+  --ink-text: #edeae2; /* body text (bone) */
+  --accent: #c2a15c; /* accent (old gold) */
+  --hairline: rgba(194, 161, 92, 0.28); /* thin rules and borders */
+
+  /* Derived UI tokens (shadcn-style) used by the button/tooltip/card
+     primitives and the playback toolbar. Tuned from the tokens above. */
+  --background: var(--ground);
+  --foreground: var(--ink-text);
+  --card: #10121a;
+  --card-foreground: var(--ink-text);
+  --primary: var(--accent);
+  --primary-foreground: var(--ground);
+  --secondary: #1a1d29;
+  --secondary-foreground: var(--ink-text);
+  --muted: #1a1d29;
+  --muted-foreground: #9aa0b4;
+  --accent-ui: #23262f;
+  --accent-ui-foreground: var(--ink-text);
+  --destructive: #b33a3a;
+  --destructive-foreground: #ffffff;
+  --border: rgba(194, 161, 92, 0.2);
+  --input: rgba(194, 161, 92, 0.2);
+  --ring: var(--accent);
+  --radius: 0.75rem;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent-ui);
+  --color-accent-foreground: var(--accent-ui-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --radius-lg: var(--radius);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-sm: calc(var(--radius) - 4px);
+}
+
+/* Fraunces is the display face (headings + verse blocks). Loaded via
+   next/font in src/app/layout.tsx and exposed as --font-fraunces. */
+h1,
+h2,
+h3,
+h4,
+h5,
+h6 {
+  font-family: var(--font-fraunces), Georgia, serif;
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+  body {
+    @apply bg-background text-foreground;
+  }
+}
+
+/* Minimal prose styles for the chapter cards (no typography plugin). */
+.prose {
+  max-width: none;
+  color: inherit;
+}
+
+.prose p {
+  margin-bottom: 1rem;
+}
+
+.prose h1,
+.prose h2,
+.prose h3,
+.prose h4,
+.prose h5,
+.prose h6 {
+  color: var(--foreground);
+  font-weight: 600;
+  margin-bottom: 1rem;
+}
