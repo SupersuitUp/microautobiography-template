@@ -241,3 +241,21 @@ Hard-won. Do not relearn them the expensive way.
 - **Fact-check sensitive personal or family history with the people in it,
   and weigh privacy and safety before publishing.** A microautobiography is
   public and permanent, and what stays in is the subject's call, not yours.
+- **Give chapter images a consistent emotional grammar.** The strongest
+  register found so far: *memories are held, evidence is shown flat, visions
+  are painted, the present is lived.* Concretely: past-era photos become
+  keepsakes held in hands (a Polaroid of the real photo for recent decades,
+  an aged bordered print for older eras, a newspaper clipping for historical
+  events), warm low light, lamplit, golden bokeh; screenshots and stats stay
+  flat as receipts; concept art stays clearly painted; present-day photos
+  stay unstyled so "now" feels live. Mixed registers per chapter are fine
+  (keepsake lead, receipt second slide).
+- **The keepsake workflow that preserves reality:** pass the ORIGINAL photo
+  to the image model as a reference and demand the print reproduce it
+  EXACTLY (faces especially), then eyeball the output against the original
+  before shipping; keep the original file in the repo untouched and give
+  the keepsake its own filename. Match the hands' skin tone to the subject.
+  Handwritten captions on the Polaroid border (a date, a place) add a lot
+  for almost nothing, but keep them to a few words: long handwriting
+  garbles. Micro-text inside the print (tracklists, newspaper body copy)
+  will garble; keep it soft-focus and let headlines carry the words.
