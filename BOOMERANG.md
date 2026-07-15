@@ -2,6 +2,7 @@
 name: generate-a-microautobiography
 description: Interview a person across seven areas of their life and return narrated life-story chapters ready to build into an audio-narrated one-page site. Consumer-facing boomerang prompt; hand to a person, not routed by the harness.
 returns: A named AI narrator, 6-9 life-story chapters written for the ear, and a per-chapter photo list
+conforms_to: https://appliedai.wiki/reference/standards/boomerang-md v0.1
 ---
 
 <!-- last_updated: 2026-07-15 -->
@@ -9,7 +10,8 @@ returns: A named AI narrator, 6-9 life-story chapters written for the ear, and a
 
 # Microautobiography Boomerang
 
-**Canonical source:** [appliedai.wiki/playbooks/generate-a-microautobiography](https://appliedai.wiki/playbooks/generate-a-microautobiography): the rendered playbook this boomerang ships in. Conforms to the [BOOMERANG.md](https://appliedai.wiki/reference/standards/boomerang-md) standard.
+**Canonical source:** [appliedai.wiki/playbooks/generate-a-microautobiography](https://appliedai.wiki/playbooks/generate-a-microautobiography): the rendered playbook this boomerang ships in.
+**Conforms to:** [BOOMERANG.md](https://appliedai.wiki/reference/standards/boomerang-md) v0.1
 
 This is the async front half of the microautobiography [GENERATE.md](./GENERATE.md). Hand it to the subject so they can tell their story in their own chat, on their own time. What comes back (narrator, chapters, photo list) enters the GENERATE's Phase C (Build) directly. One run per subject.
 
