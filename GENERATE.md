@@ -67,6 +67,13 @@ while collecting.
    subject has a text that matters to them (a scripture, a poem, a family
    saying), this is where it lives, rendered as a verse block.
 
+**Async alternative.** When the subject wants to start on their own, hand them
+`BOOMERANG.md` in this repo (a conforming [BOOMERANG.md](https://appliedai.wiki/reference/standards/boomerang-md)
+instance). They run this same interview in their own chat, on their own time,
+and send back the narrator, chapters, and photo list, which enter Phase C
+directly. Use Phase A live when a builder is already in the room; use the
+boomerang when they are not.
+
 ## Phase B: Executable decisions
 
 Lock these decisions before writing a word of chapter content. Each one is a
