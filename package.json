@@ -6,7 +6,8 @@
     "dev": "next dev --turbopack",
     "build": "next build",
     "start": "next start",
-    "narrate": "tsx scripts/generate-story-narration.ts"
+    "narrate": "tsx scripts/generate-story-narration.ts",
+    "build:narration-full": "npx tsx scripts/build-full-narration.ts"
   },
   "dependencies": {
     "@radix-ui/react-slot": "^1.2.0",

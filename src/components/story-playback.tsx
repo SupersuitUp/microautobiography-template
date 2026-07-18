@@ -21,6 +21,19 @@ import { NarrationWaveform } from '@/components/ui/narration-waveform'
 import { SentenceText } from '@/components/ui/sentence-text'
 import { STORY_TIMINGS, flatSentences } from '@/data/story-timings'
 import { useMediaQuery, useBackgroundMusic } from '@/hooks'
+import {
+  FULL_NARRATION_URL,
+  NARRATION_OFFSETS,
+  sectionIndexAtTime,
+  sectionStartTime,
+} from '@/data/story-narration-full'
+import {
+  setupMediaSession,
+  updateMediaMetadata,
+  updateMediaPositionState,
+  setMediaPlaybackState,
+  clearMediaSession,
+} from '@/lib/media-session'
 
 export interface StoryPlaybackProps {
   sections?: StorySection[];
@@ -44,19 +57,40 @@ export function StoryPlayback({ sections = STORY_SECTIONS }: StoryPlaybackProps)
   // Sentence-level sync: index of the sentence being narrated in the current
   // section (per STORY_TIMINGS), and a seek to apply once new audio loads.
   const [activeSentence, setActiveSentence] = useState(-1)
-  const pendingSeekRef = useRef<number | null>(null)
-  // Music bed under the narration. Fades with play state. Ship your own
-  // loop at public/story-music/bed.mp3 (see public/story-music/README.md).
-  // If the file is missing, playback silently no-ops.
+  // Lofi bed under the narration (Psalm 139). Fades with play state.
   useBackgroundMusic(
-    '/story-music/bed.mp3',
+    '/story-music/psalm-139-lofi.mp3',
     audioEnabled && playbackState === PlaybackState.PLAYING,
   )
   const cardRefs = useRef<(HTMLDivElement | null)[]>([])
-  const shouldAutoplayRef = useRef(false)
+  // Mirrors currentSectionIndex for use inside the one-time audio effect's
+  // event handlers (which must not close over changing state).
+  const currentSectionIndexRef = useRef(0)
   const [mousePosition, setMousePosition] = useState<{ x: number; y: number } | null>(null)
   const [hoveredCardIndex, setHoveredCardIndex] = useState<number | null>(null)
   const [carouselIndices, setCarouselIndices] = useState<Record<string, number>>({})
+
+  // Keep the ref in lockstep with the state so the persistent audio handlers
+  // and MediaSession callbacks always see the current section.
+  useEffect(() => {
+    currentSectionIndexRef.current = currentSectionIndex
+  }, [currentSectionIndex])
+
+  // Always start the story from the top on a fresh load. Browsers default to
+  // history.scrollRestoration = 'auto', which restores your prior scroll
+  // position on refresh; for a narrated story that begins at the play button,
+  // a refresh should reset to the top instead.
+  useEffect(() => {
+    if ('scrollRestoration' in history) {
+      history.scrollRestoration = 'manual'
+    }
+    window.scrollTo(0, 0)
+    return () => {
+      if ('scrollRestoration' in history) {
+        history.scrollRestoration = 'auto'
+      }
+    }
+  }, [])
 
   // Image carousel auto-rotation
   useEffect(() => {
@@ -96,59 +130,34 @@ export function StoryPlayback({ sections = STORY_SECTIONS }: StoryPlaybackProps)
   // Handle play/pause
   const togglePlayPause = useCallback(async () => {
     const audio = audioRef.current
-    if (!isReady) return
-
-    // Audioless slide: advance to next on play
-    if (!audio) {
-      if (currentSectionIndex < sections.length - 1) {
-        shouldAutoplayRef.current = true
-        setCurrentSectionIndex(prev => prev + 1)
-      } else {
-        setPlaybackState(PlaybackState.PAUSED)
-        setIsEnded(true)
-      }
-      return
-    }
-
+    if (!isReady || !audio) return
     try {
       if (playbackState === PlaybackState.PLAYING) {
         audio.pause()
         setPlaybackState(PlaybackState.PAUSED)
       } else {
         if (isEnded) {
-          window.scrollTo({ top: 0, behavior: 'smooth' })
-          // Wait for scroll to complete before resetting state
-          setTimeout(() => {
-          shouldAutoplayRef.current = true
-          setCurrentSectionIndex(0)
+          audio.currentTime = 0
           setIsEnded(false)
-          }, 1000)
-          return
-        }
-
-        // If it's the first play, scroll to the first card
-        if (currentSectionIndex === 0 && playbackState === PlaybackState.PAUSED && !audio.currentTime) {
+          setCurrentSectionIndex(0)
+          currentSectionIndexRef.current = 0
+          window.scrollTo({ top: 0, behavior: 'smooth' })
+        } else if (currentSectionIndex === 0 && !audio.currentTime) {
+          // First play: scroll to the first card.
           scrollToSection(0)
         }
-
-        if (audio.ended) {
-          audio.currentTime = 0
-        }
-        
         const playPromise = audio.play()
+        setPlaybackState(PlaybackState.PLAYING)
         if (playPromise !== undefined) {
-          setPlaybackState(PlaybackState.PLAYING)
           await playPromise
           audio.playbackRate = playbackSpeedRef.current
-        } else {
-          setPlaybackState(PlaybackState.PLAYING)
         }
       }
     } catch (error) {
       console.error('Playback failed:', error)
       setPlaybackState(PlaybackState.PAUSED)
     }
-  }, [playbackState, isReady, isEnded, currentSectionIndex, sections.length, scrollToSection])
+  }, [playbackState, isReady, isEnded, currentSectionIndex, scrollToSection])
 
   // Handle keyboard shortcuts
   useEffect(() => {
@@ -172,18 +181,10 @@ export function StoryPlayback({ sections = STORY_SECTIONS }: StoryPlaybackProps)
     }
   }, [audioEnabled, isReady, playbackState, togglePlayPause])
 
-  // Handle section end
-  const handleSectionEnd = useCallback(() => {
-    if (currentSectionIndex < sections.length - 1) {
-      shouldAutoplayRef.current = true
-      setCurrentSectionIndex(prev => prev + 1)
-    } else {
-      setPlaybackState(PlaybackState.PAUSED)
-      setIsEnded(true)
-    }
-  }, [currentSectionIndex, sections.length])
-
-  // Initialize audio element
+  // One persistent audio element for the WHOLE story. A single element playing
+  // one continuous file is what survives a locked screen — no new resource is
+  // ever loaded mid-stream. currentTime drives all per-section UI via the
+  // offset map. Created once (per audioEnabled), never per section.
   useEffect(() => {
     // If audio is globally disabled (not every section has an audioUrl), skip
     // the entire audio pipeline. The story renders as a pure scroll-through.
@@ -198,72 +199,74 @@ export function StoryPlayback({ sections = STORY_SECTIONS }: StoryPlaybackProps)
     setIsEnded(false)
     setActiveSentence(-1)
 
-    // If this section has no audio, skip audio init and mark as ready (text-only slide).
-    // Don't auto-advance: with audio disabled, the user drives navigation via play/skip.
-    const sectionAudio = sections[currentSectionIndex].audioUrl
-    if (!sectionAudio) {
-      audioRef.current = null
-      setIsReady(true)
-      setPlaybackState(PlaybackState.PAUSED)
-      shouldAutoplayRef.current = false
-      return
-    }
-
     const audio = new Audio()
 
-    const handleCanPlay = async () => {
+    const handleCanPlay = () => {
       setIsReady(true)
       audio.playbackRate = playbackSpeedRef.current
-      if (pendingSeekRef.current !== null) {
-        audio.currentTime = pendingSeekRef.current
-        pendingSeekRef.current = null
-      }
-      
-      // If we should autoplay (coming from replay or section end)
-      if (shouldAutoplayRef.current) {
-        shouldAutoplayRef.current = false
-        try {
-          const playPromise = audio.play()
-          if (playPromise !== undefined) {
-            setPlaybackState(PlaybackState.PLAYING)
-            await playPromise
-          } else {
-            setPlaybackState(PlaybackState.PLAYING)
-          }
-        } catch (error) {
-          console.error('Auto-play failed:', error)
-          setPlaybackState(PlaybackState.PAUSED)
-        }
-      } else {
-        // canplaythrough re-fires after seeks (e.g. sentence clicks); never
-        // force PAUSED while the element is actually playing.
-        setPlaybackState(
-          audio.paused ? PlaybackState.PAUSED : PlaybackState.PLAYING,
-        )
-      }
+      setPlaybackState(audio.paused ? PlaybackState.PAUSED : PlaybackState.PLAYING)
     }
 
-    // The element is the source of truth: keep React state in lockstep so
-    // music and the waveform always track real playback.
-    const handlePlay = () => setPlaybackState(PlaybackState.PLAYING)
+    // The element is the source of truth: keep React state in lockstep so the
+    // waveform and lock-screen always track real playback.
+    const handlePlay = () => {
+      // Re-apply the chosen speed on every play. iOS Safari resets an audio
+      // element's playbackRate to 1.0 on play(), so setting it only once (or
+      // only before play) silently fails on mobile.
+      audio.playbackRate = playbackSpeedRef.current
+      setPlaybackState(PlaybackState.PLAYING)
+      setMediaPlaybackState('playing')
+    }
     const handlePause = () => {
-      if (!audio.ended) setPlaybackState(PlaybackState.PAUSED)
+      if (!audio.ended) {
+        setPlaybackState(PlaybackState.PAUSED)
+        setMediaPlaybackState('paused')
+      }
     }
 
     const handleTimeUpdate = () => {
-      if (audio.duration && !isNaN(audio.duration)) {
-        setProgress(audio.currentTime / audio.duration)
+      const t = audio.currentTime
+      const idx = sectionIndexAtTime(t)
+      const secStart = sectionStartTime(idx)
+      const secDur = NARRATION_OFFSETS[idx]?.duration || 1
+      setProgress(Math.min(1, Math.max(0, (t - secStart) / secDur)))
+
+      // Section crossing → advance UI, scroll, update lock-screen title.
+      if (idx !== currentSectionIndexRef.current) {
+        currentSectionIndexRef.current = idx
+        setCurrentSectionIndex(idx)
+        scrollToSection(idx)
+        updateMediaMetadata({ title: sections[idx].title })
       }
-      const timings = STORY_TIMINGS[sections[currentSectionIndex].id]
+
+      // Sentence highlight uses section-local time.
+      const timings = STORY_TIMINGS[sections[idx].id]
       if (timings) {
-        const t = audio.currentTime
+        const localT = t - secStart
         const flat = flatSentences(timings)
-        let idx = -1
+        let sIdx = -1
         for (let i = 0; i < flat.length; i++) {
-          if (t >= flat[i].start - 0.15 && t <= flat[i].end + 0.35) idx = i
+          if (localT >= flat[i].start - 0.15 && localT <= flat[i].end + 0.35) sIdx = i
         }
-        setActiveSentence(idx)
+        setActiveSentence(sIdx)
+      } else {
+        setActiveSentence(-1)
       }
+
+      // Lock-screen scrubber tracks the whole story.
+      if (audio.duration && !isNaN(audio.duration)) {
+        updateMediaPositionState({
+          duration: audio.duration,
+          position: t,
+          playbackRate: audio.playbackRate,
+        })
+      }
+    }
+
+    const handleEnded = () => {
+      setPlaybackState(PlaybackState.PAUSED)
+      setIsEnded(true)
+      setMediaPlaybackState('paused')
     }
 
     const handleError = (e: ErrorEvent) => {
@@ -272,31 +275,26 @@ export function StoryPlayback({ sections = STORY_SECTIONS }: StoryPlaybackProps)
       setIsReady(false)
     }
 
-    // Set up audio element
-    audio.src = sectionAudio
+    audio.src = FULL_NARRATION_URL
     audio.preload = 'auto'
     audio.currentTime = 0
 
-    // Add event listeners
-    audio.addEventListener('canplaythrough', handleCanPlay)
+    audio.addEventListener('canplay', handleCanPlay)
     audio.addEventListener('play', handlePlay)
     audio.addEventListener('pause', handlePause)
-    audio.addEventListener('ended', handleSectionEnd)
+    audio.addEventListener('ended', handleEnded)
     audio.addEventListener('timeupdate', handleTimeUpdate)
     audio.addEventListener('error', handleError)
 
-    // Store reference and set initial playback speed
     audioRef.current = audio
     audio.playbackRate = playbackSpeedRef.current
-
-    // Load the audio
     audio.load()
 
     return () => {
-      audio.removeEventListener('canplaythrough', handleCanPlay)
+      audio.removeEventListener('canplay', handleCanPlay)
       audio.removeEventListener('play', handlePlay)
       audio.removeEventListener('pause', handlePause)
-      audio.removeEventListener('ended', handleSectionEnd)
+      audio.removeEventListener('ended', handleEnded)
       audio.removeEventListener('timeupdate', handleTimeUpdate)
       audio.removeEventListener('error', handleError)
       audio.pause()
@@ -304,7 +302,10 @@ export function StoryPlayback({ sections = STORY_SECTIONS }: StoryPlaybackProps)
       audioRef.current = null
       setIsReady(false)
     }
-  }, [currentSectionIndex, handleSectionEnd, sections, audioEnabled])
+    // Intentionally NOT depending on currentSectionIndex: the element persists
+    // across sections. sections/scrollToSection are stable (prop + useCallback []).
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [audioEnabled])
 
   // Handle speed change
   const toggleSpeed = useCallback(() => {
@@ -320,55 +321,84 @@ export function StoryPlayback({ sections = STORY_SECTIONS }: StoryPlaybackProps)
     setDisplaySpeed(nextSpeed) // Update display state
   }, [])
 
-  // Handle section change
+  // Handle section change — seek within the single persistent stream.
   const jumpToSection = useCallback((index: number) => {
     const audio = audioRef.current
-    if (audio) {
-      // If clicking the current section while paused, resume playback
-      if (index === currentSectionIndex && playbackState === PlaybackState.PAUSED) {
-        togglePlayPause()
-        return
-      }
-
-      // Otherwise, handle normal section change
-      audio.pause()
-      shouldAutoplayRef.current = true
-      setProgress(0)
-      setCurrentSectionIndex(index)
-      setPlaybackState(PlaybackState.PAUSED)
-      scrollToSection(index)
+    if (!audio || !isReady) return
+    // Clicking the current card toggles play/pause.
+    if (index === currentSectionIndex) {
+      togglePlayPause()
+      return
     }
-  }, [currentSectionIndex, playbackState, togglePlayPause, scrollToSection])
+    audio.currentTime = sectionStartTime(index)
+    setIsEnded(false)
+    setProgress(0)
+    setCurrentSectionIndex(index)
+    currentSectionIndexRef.current = index
+    updateMediaMetadata({ title: sections[index].title })
+    scrollToSection(index)
+    audio
+      .play()
+      .then(() => setPlaybackState(PlaybackState.PLAYING))
+      .catch(() => setPlaybackState(PlaybackState.PAUSED))
+  }, [currentSectionIndex, isReady, togglePlayPause, scrollToSection, sections])
 
-  // Click a sentence: seek there (and play). Cross-section seeks stash the
-  // target time until the new section's audio is ready.
+  // Click a sentence. Precise seek ONLY when this card is already playing
+  // (intentional karaoke scrubbing). Otherwise the click is usually accidental,
+  // so just start the clicked card from the beginning. Seeks are immediate
+  // writes to the persistent element's currentTime (global = sectionStart + local).
   const seekToSentence = useCallback(
     (sectionIndex: number, startTime: number) => {
       if (!audioEnabled) return
-      if (sectionIndex === currentSectionIndex && audioRef.current) {
-        const audio = audioRef.current
-        audio.currentTime = startTime
-        if (playbackState !== PlaybackState.PLAYING) {
-          audio
-            .play()
-            .then(() => setPlaybackState(PlaybackState.PLAYING))
-            .catch(() => {})
-        }
-        setIsEnded(false)
-      } else {
-        pendingSeekRef.current = startTime
-        const audio = audioRef.current
-        if (audio) audio.pause()
-        shouldAutoplayRef.current = true
-        setProgress(0)
-        setIsEnded(false)
+      const audio = audioRef.current
+      if (!audio) return
+      const isPlayingThisCard =
+        sectionIndex === currentSectionIndex &&
+        playbackState === PlaybackState.PLAYING
+      const local = isPlayingThisCard ? startTime : 0
+      audio.currentTime = sectionStartTime(sectionIndex) + local
+      setIsEnded(false)
+      if (sectionIndex !== currentSectionIndex) {
         setCurrentSectionIndex(sectionIndex)
-        setPlaybackState(PlaybackState.PAUSED)
+        currentSectionIndexRef.current = sectionIndex
+        updateMediaMetadata({ title: sections[sectionIndex].title })
         scrollToSection(sectionIndex)
       }
+      if (playbackState !== PlaybackState.PLAYING) {
+        setProgress(0)
+        audio
+          .play()
+          .then(() => setPlaybackState(PlaybackState.PLAYING))
+          .catch(() => {})
+      }
     },
-    [audioEnabled, currentSectionIndex, playbackState, scrollToSection],
+    [audioEnabled, currentSectionIndex, playbackState, scrollToSection, sections],
   )
+
+  // Lock-screen / Control-Center transport controls. Re-registers when the
+  // control callbacks change so button presses hit fresh state.
+  useEffect(() => {
+    if (!audioEnabled) return
+    setupMediaSession({
+      play: () => { void togglePlayPause() },
+      pause: () => { void togglePlayPause() },
+      previoustrack: () => jumpToSection(Math.max(0, currentSectionIndexRef.current - 1)),
+      nexttrack: () =>
+        jumpToSection(Math.min(sections.length - 1, currentSectionIndexRef.current + 1)),
+      seekto: (time) => {
+        const audio = audioRef.current
+        if (audio && typeof time === 'number') audio.currentTime = time
+      },
+    })
+    return () => clearMediaSession()
+  }, [audioEnabled, togglePlayPause, jumpToSection, sections])
+
+  // Seed the lock-screen title ONCE (not on every handler re-registration,
+  // which would clobber the current-section title mid-playback). handleTimeUpdate
+  // and jumpToSection keep it current after playback starts.
+  useEffect(() => {
+    if (audioEnabled) updateMediaMetadata({ title: sections[0]?.title ?? 'Bio' })
+  }, [audioEnabled, sections])
 
   // Watch for section changes (for keyboard navigation or other changes)
   useEffect(() => {
@@ -456,8 +486,8 @@ export function StoryPlayback({ sections = STORY_SECTIONS }: StoryPlaybackProps)
             {/* Background layer */}
             <div className={`absolute inset-0 rounded-lg border border-[#C2A15C]/15 transition-opacity duration-300
               ${isActiveCard
-                ? '!bg-[#10121A]'
-                : '!bg-[#10121A]/70'}`}
+                ? '!bg-[#141c46]'
+                : '!bg-[#141c46]/70'}`}
             />
 
             {/* Border effect layer */}
@@ -468,7 +498,7 @@ export function StoryPlayback({ sections = STORY_SECTIONS }: StoryPlaybackProps)
             />
             
             {/* Content layer */}
-              <CardContent className="relative pt-6 z-10 pointer-events-none">
+              <CardContent className="relative px-6 sm:px-10 lg:px-14 pt-6 z-10 pointer-events-none">
                 <div className="prose prose-lg dark:prose-invert max-w-none select-none pointer-events-auto">
                   <div className="mb-4 text-center !text-zinc-100">
                     {STORY_TIMINGS[section.id] ? (
@@ -480,7 +510,7 @@ export function StoryPlayback({ sections = STORY_SECTIONS }: StoryPlaybackProps)
                         onSentenceClick={(_, startTime) =>
                           seekToSentence(index, startTime)
                         }
-                        poemAfterIntro={!!section.poemAfterIntro}
+                        poemAfterIntro={section.id === 'builders-vow'}
                       />
                     ) : (
                     <ReactMarkdown
@@ -540,7 +570,7 @@ export function StoryPlayback({ sections = STORY_SECTIONS }: StoryPlaybackProps)
                   {section.images && section.images.length > 1 ? (
                     <div className="mt-6 mb-8 flex flex-col items-center">
                       {/* Fixed-height frame so mixed-aspect slides don't jitter the page on rotation */}
-                      <div className="relative w-full max-w-[800px] h-[320px] sm:h-[400px] overflow-hidden rounded-lg">
+                      <div className="relative w-full max-w-[800px] h-[320px] sm:h-[400px] overflow-hidden rounded-lg bg-[#0b1220]/40 border border-[#C2A15C]/10">
                         <AnimatePresence mode="wait">
                           <motion.div
                             key={carouselIndices[section.id] || 0}
@@ -586,7 +616,7 @@ export function StoryPlayback({ sections = STORY_SECTIONS }: StoryPlaybackProps)
                         alt={section.imageCaption || section.title}
                         width={800}
                         height={600}
-                        className="rounded-lg max-h-[400px] min-w-[300px] sm:min-w-[500px] w-full object-contain select-none pointer-events-none"
+                        className="rounded-lg max-h-[400px] max-w-full w-auto h-auto object-contain select-none pointer-events-none"
                         style={{ borderRadius: '0.5rem' }}
                       />
                       {section.imageCaption && (
@@ -622,7 +652,7 @@ export function StoryPlayback({ sections = STORY_SECTIONS }: StoryPlaybackProps)
       </div>
 
       {audioEnabled && (
-      <div className="fixed bottom-0 left-0 right-0 z-50 bg-background/80 backdrop-blur supports-[backdrop-filter]:bg-background/60 border-t">
+      <div data-testid="audio-toolbar" className="fixed bottom-0 left-0 right-0 z-50 bg-background/80 backdrop-blur supports-[backdrop-filter]:bg-background/60 border-t">
         <div className="max-w-screen-xl mx-auto p-4">
           <div className="w-full bg-[#C2A15C]/15 h-1 rounded-full mb-4">
             <div className="relative w-full h-full">
@@ -643,9 +673,7 @@ export function StoryPlayback({ sections = STORY_SECTIONS }: StoryPlaybackProps)
             </div>
           </div>
           <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
-            <div className="hidden sm:block w-24 text-sm text-muted-foreground">
-              {currentSectionIndex + 1} of {sections.length}
-            </div>
+            <div className="hidden sm:block w-24" aria-hidden="true" />
             <div className="flex items-center gap-2">
               <Button
                 onClick={() => jumpToSection(Math.max(0, currentSectionIndex - 1))}
@@ -720,9 +748,6 @@ export function StoryPlayback({ sections = STORY_SECTIONS }: StoryPlaybackProps)
               >
                 {displaySpeed}x
               </Button>
-            </div>
-            <div className="sm:hidden text-sm text-muted-foreground">
-              {currentSectionIndex + 1} of {sections.length}
             </div>
             <div className="hidden w-24 sm:flex sm:justify-end">
               <NarrationWaveform

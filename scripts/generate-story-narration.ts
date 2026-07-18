@@ -398,6 +398,12 @@ async function main() {
   }
   writeFileSync(timingsPath, JSON.stringify(allTimings, null, 1))
   console.log(`Wrote ${timingsPath}`)
+
+  // Rebuild the concatenated background-playback stream + offset map so the
+  // lock-screen player stays in sync with per-section narration edits.
+  console.log('→ Rebuilding full narration stream (background/lock-screen playback)')
+  execFileSync('npx', ['tsx', 'scripts/build-full-narration.ts'], { stdio: 'inherit' })
+
   console.log('Done.')
 }
 
