@@ -96,6 +96,20 @@ Give the narrator a name. Then calibrate the tone:
 The narrator is likable, precise, lightly amused, and never impressed with
 itself. See the rules section at the bottom for the hard constraints.
 
+**Default to this AI-narrator framing. It is the hero pattern.** Use it even
+when the subject has already written a lot in their own voice (a memoir, hours
+of interviews). A loving third-person narrator lands harder than raw first
+person, because it can say generous, true things a person cannot say about
+themselves, and their own words still land as quotes ("as she puts it, ..."):
+select and sequence their verbatim lines, do not paraphrase them into a house
+voice. First-person testimony is a valid alternate mode when the subject insists
+their own voice be the asset, but the AI narrator is the default.
+
+**Tone adapts to the subject; the framing does not.** The likable, lightly
+amused register above is the default for a full, varied life. For a testimony of
+real suffering, drop the amusement and make the narrator reverent-warm. Same
+third-person AI framing, different tone.
+
 ### 2. ElevenLabs voice ID
 
 Pick the voice BEFORE naming the narrator, or at minimum verify them
@@ -120,10 +134,23 @@ display face unless you have a strong reason.
 
 Walk the chapter list and assign images. Rules:
 
-- **Real photos beat generated art. Always.** Scan old albums, ask family.
-- Fully AI-generated art is allowed for scenes with no possible photo (an
-  ancestor's life, a historical moment), but it must be disclosed in the
-  caption: "An imagining of ..." is the house style.
+- **Real photos win where they exist.** Scan old albums, ask family, and use
+  them for any chapter that has one.
+- **A warm painterly imagined default is a first-class option, not just a
+  gap-filler.** Most people have few or no photos of their childhood, their
+  parents, or their hardest seasons, and few want to art-direct every slide. So
+  a single consistent warm register (painterly, honey-lit, soulful) applied
+  across all chapters, with the subject's likeness locked by a few reference
+  images (a couple of photos, or a generated character sheet), gives a beautiful
+  fully-illustrated book with zero photos supplied. The user can override any
+  slide by prompt. Caption every generated image "An imagining of ...".
+- **Lock likeness and style in the references; regenerate, do not retouch.**
+  Pass the same likeness + style reference images on every render so the person
+  stays consistent slide to slide. Read every generated image back and check
+  it. Surgical edits to remove one small wrong detail are unreliable, so fix the
+  reference and regenerate from it rather than patching the output. Watch for
+  unintended tone reads between figures (two people posed too close can read
+  wrong).
 - 2+ images on a chapter renders as an auto-rotating carousel; one image
   renders alone with a caption.
 - Export to WebP or compressed PNG/JPG at ~1200px wide and drop files in
@@ -209,16 +236,24 @@ long. Ids become filenames; pick clean slugs (`cold-open`, `origins`,
 
 ## Phase D: Deploy
 
-1. `pnpm build` locally; fix anything it complains about.
-2. Push the repo to GitHub.
-3. Import the repo at [vercel.com/new](https://vercel.com/new). Framework
+1. **Fill every template placeholder before anything else.** Grep the repo for
+   `{{` and replace all of them: the browser and OpenGraph title and description
+   in `src/app/layout.tsx` (also set an `og:image` to a strong chapter image so
+   the link unfurls), and the page hero title and closing line in
+   `src/app/page.tsx`. A deploy with `{{YOUR NAME}}` in the browser tab is a
+   shipped bug.
+2. `pnpm build` locally; fix anything it complains about.
+3. Push the repo to GitHub.
+4. Import the repo at [vercel.com/new](https://vercel.com/new). Framework
    preset: Next.js. No environment variables are needed at runtime; the
    narration MP3s and timings are committed static files, and the ElevenLabs
    key is only used by the local generation script.
-4. Deploy, then listen to the whole story once on the production URL and
-   once on a phone. Autoplay policies and audio quirks show up on mobile
-   Safari first.
-5. Optional: attach a custom domain in the Vercel project settings.
+5. Deploy, then **QA the LIVE production URL, not just the local build**: confirm
+   the real title, that a grep of the page HTML has zero `{{` placeholders, and
+   that audio and images serve 200. Then listen to the whole story once on the
+   production URL and once on a phone. Autoplay policies and audio quirks show
+   up on mobile Safari first.
+6. Optional: attach a custom domain in the Vercel project settings.
 
 ## Rules learned from the reference build
 
