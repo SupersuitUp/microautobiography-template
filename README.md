@@ -34,6 +34,10 @@ pnpm dev
 - `src/components/story-playback.tsx`: the player (cards, toolbar, carousel,
   keyboard shortcuts, sentence sync, and a chapter index: a fixed rail in the
   desktop gutter plus an in-flow card below `xl`)
+- `src/app/globals.css`: the letterhead tokens **and the `.prose` rules the
+  chapter cards depend on**. The player has no paragraph spacing of its own, so
+  a copy of the player dropped into an app without these rules renders each
+  chapter as one unbroken block
 - `src/components/ui/`: sentence renderer, live waveform, and small UI
   primitives
 - `src/hooks/useBackgroundMusic.ts`: the fading music bed (iOS-safe gain via

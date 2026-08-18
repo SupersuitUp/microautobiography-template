@@ -613,7 +613,7 @@ export function StoryPlayback({ sections = STORY_SECTIONS }: StoryPlaybackProps)
             />
             
             {/* Content layer */}
-              <CardContent className="relative px-6 sm:px-10 lg:px-14 pt-6 pb-11 z-10 pointer-events-none">
+              <CardContent className="relative px-6 sm:px-10 lg:px-14 pt-6 z-10 pointer-events-none">
                 <div className="prose prose-lg dark:prose-invert max-w-none select-none pointer-events-auto">
                   <div className="mb-4 text-center !text-zinc-100">
                     {STORY_TIMINGS[section.id] ? (
