@@ -14,7 +14,22 @@ const BAR_COUNT = 24
 let sharedCtx: AudioContext | null = null
 const analysers = new WeakMap<HTMLMediaElement, AnalyserNode>()
 
+// iOS/Safari ignores HTMLMediaElement.playbackRate once the element is routed
+// through createMediaElementSource, which silently breaks the speed control on
+// mobile. On those browsers we skip the analyser entirely and synthesize the
+// waveform; narration stays on the native audio path so 1.5x/2x work.
+function isWebAudioHostile(): boolean {
+  if (typeof navigator === 'undefined') return false
+  const ua = navigator.userAgent
+  const iOS =
+    /iP(hone|ad|od)/.test(ua) ||
+    (ua.includes('Mac') && typeof document !== 'undefined' && 'ontouchend' in document)
+  const safari = /^((?!chrome|crios|fxios|android).)*safari/i.test(ua)
+  return iOS || safari
+}
+
 function getAnalyser(el: HTMLMediaElement): AnalyserNode | null {
+  if (isWebAudioHostile()) return null
   const Ctx =
     typeof window !== 'undefined' &&
     (window.AudioContext ||
@@ -82,10 +97,23 @@ export function NarrationWaveform({
         avg =
           data.slice(0, BAR_COUNT).reduce((a, b) => a + b, 0) /
           (BAR_COUNT * 255)
+      } else if (playing) {
+        avg = 0.35
       }
+      const t = performance.now() / 1000
       for (let i = 0; i < BAR_COUNT; i++) {
         // Voice energy lives in the low bins; spread them across the bars.
-        const v = analyser && data && playing ? data[Math.floor(i * 1.5)] / 255 : 0
+        // Without an analyser (iOS/Safari), synthesize a speech-like pattern.
+        const v =
+          analyser && data && playing
+            ? data[Math.floor(i * 1.5)] / 255
+            : playing
+              ? 0.18 +
+                0.6 *
+                  Math.abs(
+                    Math.sin(t * 2.4 + i * 1.7) * Math.sin(t * 5.3 + i * 0.9),
+                  )
+              : 0
         const h = Math.max(2, v * (H - 4))
         const x = i * gap + (gap - barW) / 2
         ctx2d.fillStyle = GOLD

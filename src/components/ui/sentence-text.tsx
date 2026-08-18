@@ -73,7 +73,16 @@ export function SentenceText({
     p: number,
     verse: boolean,
   ) => (
-    <p key={p} className={verse ? 'my-3 first:mt-0 last:mb-0' : undefined}>
+    <p
+      key={p}
+      className={
+        verse
+          ? 'my-3 first:mt-0 last:mb-0'
+          : // Prose paragraphs previously had NO margin, so adjacent
+            // paragraphs butted together and a chapter read as one block.
+            'mt-6 first:mt-0'
+      }
+    >
       {sentences.map((sentence) => {
         idx++
         const i = idx

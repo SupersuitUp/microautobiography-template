@@ -32,7 +32,8 @@ pnpm dev
 
 - `src/app/page.tsx`: the page shell (letterhead header, player, quiet close)
 - `src/components/story-playback.tsx`: the player (cards, toolbar, carousel,
-  keyboard shortcuts, sentence sync)
+  keyboard shortcuts, sentence sync, and a chapter index: a fixed rail in the
+  desktop gutter plus an in-flow card below `xl`)
 - `src/components/ui/`: sentence renderer, live waveform, and small UI
   primitives
 - `src/hooks/useBackgroundMusic.ts`: the fading music bed (iOS-safe gain via

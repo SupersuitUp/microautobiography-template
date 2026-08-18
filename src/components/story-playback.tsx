@@ -48,6 +48,9 @@ export function StoryPlayback({ sections = STORY_SECTIONS }: StoryPlaybackProps)
   const isHoverDevice = useMediaQuery('(hover: hover)')
   const [playbackState, setPlaybackState] = useState<PlaybackState>(PlaybackState.LOADING)
   const [currentSectionIndex, setCurrentSectionIndex] = useState(0)
+  // Which chapter the READER is at, derived from scroll position (not playback):
+  // drives the highlight in the right-hand rail even when audio never starts.
+  const [scrollChapter, setScrollChapter] = useState(0)
   const [progress, setProgress] = useState(0)
   const [isReady, setIsReady] = useState(false)
   const [isEnded, setIsEnded] = useState(false)
@@ -441,9 +444,121 @@ export function StoryPlayback({ sections = STORY_SECTIONS }: StoryPlaybackProps)
     setHoveredCardIndex(null)
   }, [])
 
+  // Scroll-spy for the chapter rail: the active chapter is the last card whose
+  // top has crossed a marker a third of the way down the viewport. Tracks both
+  // manual scrolling and the auto-scroll that follows narration.
+  useEffect(() => {
+    let raf = 0
+    const onScroll = () => {
+      cancelAnimationFrame(raf)
+      raf = requestAnimationFrame(() => {
+        const marker = window.scrollY + window.innerHeight * 0.35
+        let idx = 0
+        cardRefs.current.forEach((el, i) => {
+          if (el && el.offsetTop <= marker) idx = i
+        })
+        setScrollChapter(idx)
+      })
+    }
+    onScroll()
+    window.addEventListener('scroll', onScroll, { passive: true })
+    return () => {
+      window.removeEventListener('scroll', onScroll)
+      cancelAnimationFrame(raf)
+    }
+  }, [])
+
+  // Chapter-index navigation. Unlike jumpToSection (card clicks), this never
+  // changes play state: if narration is running it keeps running from the
+  // chosen chapter; if paused, the seek waits there so Play continues from it.
+  const goToChapter = useCallback((index: number) => {
+    scrollToSection(index)
+    if (!audioEnabled) return
+    const audio = audioRef.current
+    if (!audio || !isReady) return
+    audio.currentTime = sectionStartTime(index)
+    setIsEnded(false)
+    setProgress(0)
+    setCurrentSectionIndex(index)
+    currentSectionIndexRef.current = index
+    updateMediaMetadata({ title: sections[index].title })
+  }, [audioEnabled, isReady, scrollToSection, sections])
+
   return (
     <div className="space-y-8">
-      <div className={`space-y-8 ${audioEnabled ? 'pb-24' : ''}`}>
+      {/* Right-hand chapter rail (desktop): a fixed, docs-style table of
+          contents in the gutter beside the story. Follows the reader via the
+          scroll-spy; clicking a title jumps there. Below xl the gutter is gone,
+          so the in-flow Chapters card at the top serves instead. */}
+      <nav
+        aria-label="Chapter quick navigation"
+        className="fixed right-6 top-32 z-40 hidden w-52 xl:block"
+      >
+        <p className="select-none pl-4 text-[10px] font-medium uppercase tracking-[0.3em] text-[#C2A15C]">
+          Chapters
+        </p>
+        <ol className="mt-3 max-h-[calc(100vh-19rem)] overflow-y-auto border-l border-[#C2A15C]/20 [scrollbar-width:thin]">
+          {sections.map((section, index) => {
+            const isActive = index === scrollChapter
+            return (
+              <li key={section.id}>
+                <button
+                  type="button"
+                  onClick={() => goToChapter(index)}
+                  className={`block w-full py-1 pl-4 pr-2 text-left text-[13px] leading-snug transition-colors ${
+                    isActive
+                      ? 'text-[#E3CD9C]'
+                      : 'text-zinc-400 hover:text-zinc-100'
+                  }`}
+                >
+                  {section.title}
+                </button>
+              </li>
+            )
+          })}
+        </ol>
+      </nav>
+      {/* Chapter index: lets a visitor jump straight to a part of the story
+          instead of scrolling the whole thing. */}
+      <BlurFade delay={0.45} className="xl:hidden">
+        <nav
+          aria-label="Chapters"
+          className="rounded-lg border border-[#C2A15C]/15 bg-[#141c46]/50 px-6 py-5 sm:px-8"
+        >
+          <p className="select-none text-center text-[11px] font-medium uppercase tracking-[0.3em] text-[#C2A15C]">
+            Chapters
+          </p>
+          <ol className="mt-4 grid gap-x-8 gap-y-1 sm:grid-cols-2">
+            {sections.map((section, index) => {
+              const isCurrent = audioEnabled && index === currentSectionIndex
+              return (
+                <li key={section.id}>
+                  <button
+                    type="button"
+                    onClick={() => goToChapter(index)}
+                    className={`group flex w-full items-baseline gap-3 rounded px-1 py-1 text-left text-sm transition-colors ${
+                      isCurrent ? 'text-[#E3CD9C]' : 'text-zinc-300 hover:text-white'
+                    }`}
+                  >
+                    <span
+                      className={`w-5 shrink-0 text-right font-mono text-xs transition-colors ${
+                        isCurrent
+                          ? 'text-[#C2A15C]'
+                          : 'text-[#C2A15C]/60 group-hover:text-[#C2A15C]'
+                      }`}
+                    >
+                      {index + 1}
+                    </span>
+                    <span className="leading-snug">{section.title}</span>
+                  </button>
+                </li>
+              )
+            })}
+          </ol>
+        </nav>
+      </BlurFade>
+      {/* pb clears the fixed audio toolbar (~100px tall on mobile) */}
+      <div className={`space-y-8 ${audioEnabled ? 'pb-32' : 'pb-8'}`}>
         {sections.map((section, index) => {
           const isActiveCard = audioEnabled && index === currentSectionIndex
           const cursorClass = !audioEnabled
@@ -498,7 +613,7 @@ export function StoryPlayback({ sections = STORY_SECTIONS }: StoryPlaybackProps)
             />
             
             {/* Content layer */}
-              <CardContent className="relative px-6 sm:px-10 lg:px-14 pt-6 z-10 pointer-events-none">
+              <CardContent className="relative px-6 sm:px-10 lg:px-14 pt-6 pb-11 z-10 pointer-events-none">
                 <div className="prose prose-lg dark:prose-invert max-w-none select-none pointer-events-auto">
                   <div className="mb-4 text-center !text-zinc-100">
                     {STORY_TIMINGS[section.id] ? (
